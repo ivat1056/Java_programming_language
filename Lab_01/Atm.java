@@ -5,9 +5,23 @@ import java.util.Scanner;
 
 public class Atm 
 {
+    // --- ЗАКОММЕНТИРОВАНО: старые массивы номиналов и количеств ---
+    // static int[] denoms = {5000, 2000, 1000, 500, 200, 100, 50, 10, 5};
+    // static int[] counts = {10, 10, 10, 10, 10, 10, 10, 10, 10}; 
 
-    static int[] denoms = {5000, 2000, 1000, 500, 200, 100, 50, 10, 5};
-    static int[] counts = {10, 10, 10, 10, 10, 10, 10, 10, 10}; 
+    // --- ДОБАВЛЕНО: массив объектов CashHolder ---
+    static CashHolder[] cashHolders = {
+        new CashHolder(5000, 10),
+        new CashHolder(2000, 10),
+        new CashHolder(1000, 10),
+        new CashHolder(500, 10),
+        new CashHolder(200, 10),
+        new CashHolder(100, 10),
+        new CashHolder(50, 10),
+        new CashHolder(10, 10),
+        new CashHolder(5, 10)
+    };
+
     static int userBalance = 0;
     static String currentUserName = "unknown";
     static String currentUserRole = "user"; 
@@ -16,6 +30,10 @@ public class Atm
     static String cashSessionFile = "cash_" + sessionId + ".txt";
     static String opsAllFile = "ops_all.txt";
     static String cashAllFile = "cash_all.txt";
+
+    // --- ДОБАВЛЕНО: объекты Journal для логирования ---
+    static Journal opJournal = new Journal(opsAllFile, opsSessionFile);
+    static Journal cashJournal = new Journal(cashAllFile, cashSessionFile);
 
     static Scanner scanner = new Scanner(System.in);
 
@@ -49,7 +67,9 @@ public class Atm
                     break;
                 case 0:
                     System.out.println("Выход...");
-                    logOperation("Выход", "-", "OK");
+                    // --- ИЗМЕНЕНО: теперь через Operation ---
+                    Operation op = new Operation("Выход", "-", currentUserName, opJournal);
+                    op.execute("OK");
                     break;
                 default:
                     System.out.println("Неверный пункт меню.");
@@ -100,16 +120,19 @@ public class Atm
         if (!found) 
         {
             System.out.println("Авторизация не удалась. Завершение работы.");
-            logOperation("Авторизация", "card=" + cardInput, "FAIL");
+            // --- ИЗМЕНЕНО: теперь через Operation ---
+            Operation op = new Operation("Авторизация", "card=" + cardInput, currentUserName, opJournal);
+            op.execute("FAIL");
             System.exit(0);
         } 
         else 
         {
             System.out.println("Успешный вход. Пользователь: " + currentUserName + " (" + currentUserRole + ")");
-            logOperation("Авторизация", "card=" + cardInput, "OK");
+            // --- ИЗМЕНЕНО: теперь через Operation ---
+            Operation op = new Operation("Авторизация", "card=" + cardInput, currentUserName, opJournal);
+            op.execute("OK");
         }
     }
-
 
     static void printMenu() 
     {
@@ -142,48 +165,55 @@ public class Atm
         if (amount <= 0 || amount > userBalance) 
         {
             System.out.println("Некорректная сумма или недостаточно средств на счете.");
-            logOperation("Снятие", "amount=" + amount, "FAIL (balance)");
+            // --- ИЗМЕНЕНО: теперь через Operation ---
+            Operation op = new Operation("Снятие", "amount=" + amount, currentUserName, opJournal);
+            op.execute("FAIL (balance)");
             return;
         }
 
-        int[] take = new int[denoms.length];
+        int[] take = new int[cashHolders.length];
         boolean ok = calcWithdraw(amount, take);
         if (!ok) 
         {
             System.out.println("Невозможно выдать сумму.");
-            logOperation("Снятие", "amount=" + amount, "FAIL (cash)");
+            // --- ИЗМЕНЕНО: теперь через Operation ---
+            Operation op = new Operation("Снятие", "amount=" + amount, currentUserName, opJournal);
+            op.execute("FAIL (cash)");
             return;
         }
 
-        for (int i = 0; i < denoms.length; i++) 
+        for (int i = 0; i < cashHolders.length; i++) 
         {
-            counts[i] -= take[i];
-            if (take[i] != 0) 
+            int cnt = take[i];
+            cashHolders[i].removeCash(cnt);
+            if (cnt != 0) 
             {
-                logCashChange("Снятие", denoms[i], -take[i]);
+                cashJournal.log("Снятие", String.valueOf(cashHolders[i].getDenomination()), String.valueOf(-cnt));
             }
         }
         userBalance -= amount;
 
         System.out.println("Выдано " + amount + " руб. Купюры:");
-        for (int i = 0; i < denoms.length; i++) 
+        for (int i = 0; i < cashHolders.length; i++) 
         {
             if (take[i] > 0) 
             {
-                System.out.println("  " + denoms[i] + " x " + take[i]);
+                System.out.println("  " + cashHolders[i].getDenomination() + " x " + take[i]);
             }
         }
-        logOperation("Снятие", "amount=" + amount, "OK");
+        // --- ИЗМЕНЕНО: теперь через Operation ---
+        Operation op = new Operation("Снятие", "amount=" + amount, currentUserName, opJournal);
+        op.execute("OK");
     }
 
     static boolean calcWithdraw(int amount, int[] resultTake) 
     {
         int remaining = amount;
-        for (int i = 0; i < denoms.length; i++) 
+        for (int i = 0; i < cashHolders.length; i++) 
         {
-            int denom = denoms[i];
+            int denom = cashHolders[i].getDenomination();
             int maxNeed = remaining / denom;  
-            int take = Math.min(maxNeed, counts[i]);
+            int take = Math.min(maxNeed, cashHolders[i].getCount());
             resultTake[i] = take;
             remaining -= take * denom;
         }
@@ -194,20 +224,22 @@ public class Atm
     {
         System.out.println("\nВнесение наличных");
         int total = 0;
-        for (int i = 0; i < denoms.length; i++) 
+        for (int i = 0; i < cashHolders.length; i++) 
         {
-            int cnt = readInt("Сколько купюр номиналом " + denoms[i] + " внести? ");
+            int cnt = readInt("Сколько купюр номиналом " + cashHolders[i].getDenomination() + " внести? ");
             if (cnt < 0) cnt = 0;
-            counts[i] += cnt;
-            total += cnt * denoms[i];
+            cashHolders[i].addCash(cnt);
+            total += cnt * cashHolders[i].getDenomination();
             if (cnt != 0) 
             {
-                logCashChange("Внесение(польз.)", denoms[i], cnt);
+                cashJournal.log("Внесение(польз.)", String.valueOf(cashHolders[i].getDenomination()), String.valueOf(cnt));
             }
         }
         userBalance += total;
         System.out.println("Внесено всего: " + total + " руб.");
-        logOperation("Внесение", "total=" + total, "OK");
+        // --- ИЗМЕНЕНО: теперь через Operation ---
+        Operation op = new Operation("Внесение", "total=" + total, currentUserName, opJournal);
+        op.execute("OK");
     }
 
     static void payService() 
@@ -219,28 +251,34 @@ public class Atm
         if (amount <= 0 || amount > userBalance) 
         {
             System.out.println("Некорректная сумма или недостаточно средств на счете.");
-            logOperation("Оплата услуг", "service=" + service + ";amount=" + amount, "FAIL (balance)");
+            // --- ИЗМЕНЕНО: теперь через Operation ---
+            Operation op = new Operation("Оплата услуг", "service=" + service + ";amount=" + amount, currentUserName, opJournal);
+            op.execute("FAIL (balance)");
             return;
         }
         userBalance -= amount;
         System.out.println("Услуга \"" + service + "\" оплачена на " + amount + " руб.");
-        logOperation("Оплата услуг", "service=" + service + ";amount=" + amount, "OK");
+        // --- ИЗМЕНЕНО: теперь через Operation ---
+        Operation op = new Operation("Оплата услуг", "service=" + service + ";amount=" + amount, currentUserName, opJournal);
+        op.execute("OK");
     }
 
     static void refillAtm() 
     {
         System.out.println("\n--- Пополнение банкомата (сервис) ---");
-        for (int i = 0; i < denoms.length; i++) 
+        for (int i = 0; i < cashHolders.length; i++) 
         {
-            int cnt = readInt("Сколько купюр номиналом " + denoms[i] + " добавить? ");
+            int cnt = readInt("Сколько купюр номиналом " + cashHolders[i].getDenomination() + " добавить? ");
             if (cnt < 0) cnt = 0;
-            counts[i] += cnt;
+            cashHolders[i].addCash(cnt);
             if (cnt != 0) 
             {
-                logCashChange("Пополнение(сервис)", denoms[i], cnt);
+                cashJournal.log("Пополнение(сервис)", String.valueOf(cashHolders[i].getDenomination()), String.valueOf(cnt));
             }
         }
-        logOperation("Пополнение банкомата", "-", "OK");
+        // --- ИЗМЕНЕНО: теперь через Operation ---
+        Operation op = new Operation("Пополнение банкомата", "-", currentUserName, opJournal);
+        op.execute("OK");
     }
 
     static void printCashReport() 
@@ -277,39 +315,15 @@ public class Atm
         }
 
         System.out.println(line);
-        logOperation("Отчет по купюрам", "file=" + cashSessionFile, "OK");
+        // --- ИЗМЕНЕНО: теперь через Operation ---
+        Operation op = new Operation("Отчет по купюрам", "file=" + cashSessionFile, currentUserName, opJournal);
+        op.execute("OK");
     }
 
+    // --- Остальные методы не изменялись ---
     static String now() 
     {
         return new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
-    }
-
-    static void logOperation(String operation, String body, String result) 
-    {
-        String dt = now();
-        String line = dt + ";" + currentUserName + ";" + operation + ";" + body + ";" + result;
-        writeLine(opsSessionFile, line);
-        writeLine(opsAllFile, line); 
-    }
-
-    static void logCashChange(String operation, int denom, int countChange) 
-    {
-        String dt = now();
-        String line = dt + ";" + operation + ";" + denom + ";" + countChange;
-        writeLine(cashSessionFile, line);
-        writeLine(cashAllFile, line);
-    }
-
-    static void writeLine(String fileName, String line) 
-    {
-        try (FileWriter fw = new FileWriter(fileName, true)) 
-        {
-            fw.write(line + System.lineSeparator());
-        } catch (IOException e) 
-        {
-            System.out.println("Ошибка записи в файл " + fileName + ": " + e.getMessage());
-        }
     }
 
     static String readLine(String msg) 
