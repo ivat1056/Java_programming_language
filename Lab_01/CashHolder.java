@@ -1,17 +1,21 @@
-public class CashHolder {
+public class CashHolder 
+{
     private int denomination;
     private int count;
 
-    public CashHolder(int denomination, int count) {
+    public CashHolder(int denomination, int count) 
+    {
         this.denomination = denomination;
         this.count = count;
     }
 
-    public int getDenomination() {
+    public int getDenomination() 
+    {
         return denomination;
     }
 
-    public int getCount() {
+    public int getCount() 
+    {
         return count;
     }
 
@@ -19,11 +23,13 @@ public class CashHolder {
         this.count = count;
     }
 
-    public void addCash(int amount) {
+    public void addCash(int amount) 
+    {
         this.count += amount;
     }
 
-    public void removeCash(int amount) {
+    public void removeCash(int amount) 
+    {
         this.count -= amount;
     }
 }
