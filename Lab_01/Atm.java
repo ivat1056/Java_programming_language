@@ -5,11 +5,10 @@ import java.util.Scanner;
 
 public class Atm 
 {
-    // --- ЗАКОММЕНТИРОВАНО: старые массивы номиналов и количеств ---
+    
     // static int[] denoms = {5000, 2000, 1000, 500, 200, 100, 50, 10, 5};
     // static int[] counts = {10, 10, 10, 10, 10, 10, 10, 10, 10}; 
 
-    // --- ДОБАВЛЕНО: массив объектов CashHolder ---
     static CashHolder[] cashHolders = 
     {
         new CashHolder(5000, 10),
@@ -32,7 +31,7 @@ public class Atm
     static String opsAllFile = "ops_all.txt";
     static String cashAllFile = "cash_all.txt";
 
-    // --- ДОБАВЛЕНО: объекты Journal для логирования ---
+    
     static Journal opJournal = new Journal(opsAllFile, opsSessionFile);
     static Journal cashJournal = new Journal(cashAllFile, cashSessionFile);
 
@@ -68,9 +67,10 @@ public class Atm
                     break;
                 case 0:
                     System.out.println("Выход...");
-                    // --- ИЗМЕНЕНО: теперь через Operation ---
+                    //
                     Operation op = new Operation("Выход", "-", currentUserName, opJournal);
                     op.execute("OK");
+                    //
                     break;
                 default:
                     System.out.println("Неверный пункт меню.");
@@ -121,17 +121,19 @@ public class Atm
         if (!found) 
         {
             System.out.println("Авторизация не удалась. Завершение работы.");
-            // --- ИЗМЕНЕНО: теперь через Operation ---
+            //
             Operation op = new Operation("Авторизация", "card=" + cardInput, currentUserName, opJournal);
             op.execute("FAIL");
             System.exit(0);
+            //
         } 
         else 
         {
             System.out.println("Успешный вход. Пользователь: " + currentUserName + " (" + currentUserRole + ")");
-            // --- ИЗМЕНЕНО: теперь через Operation ---
+            // 
             Operation op = new Operation("Авторизация", "card=" + cardInput, currentUserName, opJournal);
             op.execute("OK");
+            //
         }
     }
 
@@ -166,9 +168,10 @@ public class Atm
         if (amount <= 0 || amount > userBalance) 
         {
             System.out.println("Некорректная сумма или недостаточно средств на счете.");
-            // --- ИЗМЕНЕНО: теперь через Operation ---
+            // 
             Operation op = new Operation("Снятие", "amount=" + amount, currentUserName, opJournal);
             op.execute("FAIL (balance)");
+            //
             return;
         }
 
@@ -177,9 +180,10 @@ public class Atm
         if (!ok) 
         {
             System.out.println("Невозможно выдать сумму.");
-            // --- ИЗМЕНЕНО: теперь через Operation ---
+            // 
             Operation op = new Operation("Снятие", "amount=" + amount, currentUserName, opJournal);
             op.execute("FAIL (cash)");
+            //
             return;
         }
 
@@ -202,9 +206,10 @@ public class Atm
                 System.out.println("  " + cashHolders[i].getDenomination() + " x " + take[i]);
             }
         }
-        // --- ИЗМЕНЕНО: теперь через Operation ---
+        // 
         Operation op = new Operation("Снятие", "amount=" + amount, currentUserName, opJournal);
         op.execute("OK");
+        //
     }
 
     static boolean calcWithdraw(int amount, int[] resultTake) 
@@ -238,9 +243,10 @@ public class Atm
         }
         userBalance += total;
         System.out.println("Внесено всего: " + total + " руб.");
-        // --- ИЗМЕНЕНО: теперь через Operation ---
+        // 
         Operation op = new Operation("Внесение", "total=" + total, currentUserName, opJournal);
         op.execute("OK");
+        //
     }
 
     static void payService() 
@@ -252,16 +258,18 @@ public class Atm
         if (amount <= 0 || amount > userBalance) 
         {
             System.out.println("Некорректная сумма или недостаточно средств на счете.");
-            // --- ИЗМЕНЕНО: теперь через Operation ---
+            // 
             Operation op = new Operation("Оплата услуг", "service=" + service + ";amount=" + amount, currentUserName, opJournal);
             op.execute("FAIL (balance)");
+            //
             return;
         }
         userBalance -= amount;
         System.out.println("Услуга \"" + service + "\" оплачена на " + amount + " руб.");
-        // --- ИЗМЕНЕНО: теперь через Operation ---
+        // 
         Operation op = new Operation("Оплата услуг", "service=" + service + ";amount=" + amount, currentUserName, opJournal);
         op.execute("OK");
+        //
     }
 
     static void refillAtm() 
@@ -277,9 +285,10 @@ public class Atm
                 cashJournal.log("Пополнение(сервис)", String.valueOf(cashHolders[i].getDenomination()), String.valueOf(cnt));
             }
         }
-        // --- ИЗМЕНЕНО: теперь через Operation ---
+        // 
         Operation op = new Operation("Пополнение банкомата", "-", currentUserName, opJournal);
         op.execute("OK");
+        //
     }
 
     static void printCashReport() 
@@ -317,12 +326,12 @@ public class Atm
         }
 
         System.out.println(line);
-        // --- ИЗМЕНЕНО: теперь через Operation ---
+        // 
         Operation op = new Operation("Отчет по купюрам", "file=" + cashSessionFile, currentUserName, opJournal);
         op.execute("OK");
+        //
     }
 
-    // --- Остальные методы не изменялись ---
     static String now() 
     {
         return new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());

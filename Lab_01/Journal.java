@@ -7,14 +7,12 @@ public class Journal
     private String allFile;
     private String sessionFile;
 
-    // --- Исправлено: конструктор для двух файлов ---
     public Journal(String allFile, String sessionFile) 
     {
         this.allFile = allFile;
         this.sessionFile = sessionFile;
     }
 
-    // --- Добавлено: логирование операций (Operation) ---
     public void log(String name, String details, String result, String user) 
     {
         String dt = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
@@ -23,7 +21,6 @@ public class Journal
         writeLine(allFile, line);
     }
 
-    // --- Добавлено: логирование изменений купюр ---
     public void log(String operation, String denom, String count) 
     {
         String dt = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
