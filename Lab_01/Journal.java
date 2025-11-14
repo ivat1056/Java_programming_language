@@ -37,7 +37,8 @@ public class Journal
         try (FileWriter fw = new FileWriter(fileName, true)) 
         {
             fw.write(line + System.lineSeparator());
-        } catch (IOException e) 
+        } 
+        catch (IOException e) 
         {
             System.out.println("Ошибка записи в файл " + fileName + ": " + e.getMessage());
         }

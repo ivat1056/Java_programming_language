@@ -10,7 +10,8 @@ public class Atm
     // static int[] counts = {10, 10, 10, 10, 10, 10, 10, 10, 10}; 
 
     // --- ДОБАВЛЕНО: массив объектов CashHolder ---
-    static CashHolder[] cashHolders = {
+    static CashHolder[] cashHolders = 
+    {
         new CashHolder(5000, 10),
         new CashHolder(2000, 10),
         new CashHolder(1000, 10),
@@ -309,7 +310,8 @@ public class Atm
                 String cnt = padLeft(parts[3], 7);
                 System.out.println("| " + dt + " | " + op + " | " + denom + " | " + cnt + " |");
             }
-        } catch (IOException e) 
+        } 
+        catch (IOException e) 
         {
             System.out.println("Ошибка чтения отчета: " + e.getMessage());
         }
@@ -341,7 +343,9 @@ public class Atm
                 System.out.print(msg);
                 String s = scanner.nextLine();
                 return Integer.parseInt(s.trim());
-            } catch (NumberFormatException e) {
+            } 
+            catch (NumberFormatException e) 
+            {
                 System.out.println("Введите целое число.");
             }
         }
