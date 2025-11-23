@@ -24,13 +24,28 @@ public class CashHolder
         this.count = count;
     }
 
-    public void addCash(int amount) 
+    // 
+    public void addCash(int amount) throws InvalidDenominationException 
     {
+        // 
+        if (amount < 0) 
+        {
+            throw new InvalidDenominationException("Количество купюр не может быть отрицательным");
+        }
         this.count += amount;
     }
 
-    public void removeCash(int amount) 
+    // 
+    public void removeCash(int amount) throws InsufficientDenominationException 
     {
+        // 
+        if (amount > this.count) 
+        {
+            throw new InsufficientDenominationException(
+                "Недостаточное количество купюр номинала " + denomination + 
+                ". Требуется: " + amount + ", доступно: " + this.count
+            );
+        }
         this.count -= amount;
     }
 }
