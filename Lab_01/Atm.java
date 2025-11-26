@@ -5,6 +5,9 @@ import java.util.Scanner;
 
 public class Atm 
 {
+    // --- ДОБАВЛЕНО: объект для работы с БД ---
+    static DatabaseManager db = new DatabaseManager();
+    
     static CashHolder[] cashHolders = 
     {
         new CashHolder(5000, 10),
@@ -26,24 +29,24 @@ public class Atm
     static String cashSessionFile = "cash_" + sessionId + ".txt";
     static String opsAllFile = "ops_all.txt";
     static String cashAllFile = "cash_all.txt";
-    //
-    static Journal opJournal = new Journal(opsAllFile, opsSessionFile);
-    static Journal cashJournal = new Journal(cashAllFile, cashSessionFile);
+
+    // --- ИЗМЕНЕНО: передача db в Journal ---
+    static Journal opJournal = new Journal(opsAllFile, opsSessionFile, db);
+    static Journal cashJournal = new Journal(cashAllFile, cashSessionFile, db);
 
     static Scanner scanner = new Scanner(System.in);
-    //
+
     public static void main(String[] args) 
     {
         System.out.println("=== Банкомат ===");
         
-        // 
         try 
         {
             loadUsersAndAuthorize();
         } catch (InvalidCredentialsException e) 
         {
-            // 
             System.out.println("Ошибка авторизации: " + e.getMessage());
+            db.close();
             System.exit(0);
         }
 
@@ -52,7 +55,7 @@ public class Atm
         {
             printMenu();
             choice = readInt("Выберите пункт меню : ");
-            //
+            
             try 
             {
                 switch (choice) 
@@ -71,8 +74,14 @@ public class Atm
                         else System.out.println("Нет прав доступа.");
                         break;
                     case 5:
-                        if (isAdmin()) printCashReport();
+                        if (isAdmin()) {
+                            printCashReport();
+                        }
                         else System.out.println("Нет прав доступа.");
+                        break;
+                    case 6:
+                        // --- ДОБАВЛЕНО: показать историю из БД ---
+                        db.printOperations();
                         break;
                     case 0:
                         System.out.println("Выход...");
@@ -80,71 +89,36 @@ public class Atm
                         op.execute("OK");
                         break;
                     default:
-                        // 
-                        throw new InvalidOperationException("Неверный пункт меню. Выберите 0-5.");
+                        throw new InvalidOperationException("Неверный пункт меню. Выберите 0-6.");
                 }
             } catch (AtmException e) 
             {
-                // 
                 System.out.println("Ошибка операции: " + e.getMessage());
             }
         } while (choice != 0);
 
         System.out.println("Сеанс завершён.");
+        // --- ДОБАВЛЕНО: закрытие БД при выходе ---
+        db.close();
     }
 
+    // --- ИЗМЕНЕНО: авторизация теперь из БД ---
     static void loadUsersAndAuthorize() throws InvalidCredentialsException
     {
         System.out.println("Авторизация по карте");
         String cardInput = readLine("Введите номер карты: ");
         String pinInput = readLine("Введите PIN: ");
-        boolean found = false;
+        
+        // --- ДОБАВЛЕНО: проверка в БД вместо файла ---
+        User user = db.authenticate(cardInput, pinInput);
+        
+        currentUserName = user.getName();
+        currentUserRole = user.getRole();
+        userBalance = user.getBalance();
 
-        File f = new File("users.txt");
-        if (f.exists()) 
-        {
-            try (BufferedReader br = new BufferedReader(new FileReader(f))) 
-            {
-                String line;
-                while ((line = br.readLine()) != null) 
-                {
-                    String[] parts = line.trim().split(";");
-                    if (parts.length < 5) continue;
-                    String card = parts[0];
-                    String pin = parts[1];
-                    String name = parts[2];
-                    String role = parts[3];
-                    int balance = Integer.parseInt(parts[4]);
-
-                    // 
-                    if (card.equals(cardInput) && pin.equals(pinInput)) 
-                    {
-                        currentUserName = name;
-                        currentUserRole = role;
-                        userBalance = balance;
-                        found = true;
-                        break;
-                    }
-                }
-            } catch (IOException e) 
-            {
-                System.out.println("Ошибка чтения users.txt: " + e.getMessage());
-            }
-        } 
-
-        // 
-        if (!found) 
-        {
-            Operation op = new Operation("Авторизация", "card=" + cardInput, currentUserName, opJournal);
-            op.execute("FAIL");
-            throw new InvalidCredentialsException("Неверные учетные данные (карта или PIN)");
-        } 
-        else 
-        {
-            System.out.println("Успешный вход. Пользователь: " + currentUserName + " (" + currentUserRole + ")");
-            Operation op = new Operation("Авторизация", "card=" + cardInput, currentUserName, opJournal);
-            op.execute("OK");
-        }
+        System.out.println("Успешный вход. Пользователь: " + currentUserName + " (" + currentUserRole + ")");
+        Operation op = new Operation("Авторизация", "card=" + cardInput, currentUserName, opJournal);
+        op.execute("OK");
     }
 
     static void printMenu() 
@@ -155,6 +129,7 @@ public class Atm
         {
             System.out.println("4. Пополнение банкомата (сервис)");
             System.out.println("5. Отчет по купюрам (сервис)");
+            System.out.println("6. История операций из БД");
             System.out.println("0. Выход");
         }
         else
@@ -171,45 +146,39 @@ public class Atm
         return "admin".equalsIgnoreCase(currentUserRole);
     }
 
-    // 
     static void withdrawCash() throws AtmException
     {
         System.out.println("\n--- Снятие наличных ---");
         int amount = readInt("Введите сумму для снятия: ");
         
-        // 
         if (amount <= 0) 
         {
             throw new InvalidOperationParametersException("Сумма должна быть больше нуля");
         }
         
-        // 
         if (amount > userBalance) 
         {
             Operation op = new Operation("Снятие", "amount=" + amount, currentUserName, opJournal);
             op.execute("FAIL (balance)");
-            throw new InsufficientCashException("Недостаточно средств на счете. Требуется: " + amount + ", доступно: " + userBalance);
+            throw new InsufficientCashException("Недостаточно средств на счете");
         }
 
         int[] take = new int[cashHolders.length];
         try {
-            // 
             boolean ok = calcWithdraw(amount, take);
             if (!ok) 
             {
                 Operation op = new Operation("Снятие", "amount=" + amount, currentUserName, opJournal);
                 op.execute("FAIL (cash)");
-                throw new InsufficientCashException("Недостаточно наличных в банкомате требуемого номинала");
+                throw new InsufficientCashException("Недостаточно наличных в банкомате");
             }
         } catch (InsufficientDenominationException e) 
         {
-            // 
             Operation op = new Operation("Снятие", "amount=" + amount, currentUserName, opJournal);
             op.execute("FAIL (denomination)");
-            throw new InsufficientCashException("Недостаточное количество купюр требуемого номинала: " + e.getMessage());
+            throw new InsufficientCashException("Недостаточное количество купюр");
         }
 
-        // 
         for (int i = 0; i < cashHolders.length; i++) 
         {
             int cnt = take[i];
@@ -219,13 +188,15 @@ public class Atm
                     cashHolders[i].removeCash(cnt);
                 } catch (InsufficientDenominationException e) 
                 {
-                    // 
                     throw new InsufficientDenominationException(e.getMessage());
                 }
                 cashJournal.log("Снятие", String.valueOf(cashHolders[i].getDenomination()), String.valueOf(-cnt));
             }
         }
         userBalance -= amount;
+        
+        // --- ДОБАВЛЕНО: обновление баланса в БД ---
+        db.updateBalance(currentUserName, userBalance);
 
         System.out.println("Выдано " + amount + " руб. Купюры:");
         for (int i = 0; i < cashHolders.length; i++) 
@@ -239,7 +210,6 @@ public class Atm
         op.execute("OK");
     }
 
-    // 
     static boolean calcWithdraw(int amount, int[] resultTake) throws InsufficientDenominationException
     {
         int remaining = amount;
@@ -254,7 +224,6 @@ public class Atm
         return remaining == 0;
     }
 
-    // 
     static void depositCash() throws AtmException
     {
         System.out.println("\nВнесение наличных");
@@ -262,16 +231,15 @@ public class Atm
         for (int i = 0; i < cashHolders.length; i++) 
         {
             int cnt = readInt("Сколько купюр номиналом " + cashHolders[i].getDenomination() + " внести? ");
-            // 
+            
             if (cnt < 0) 
             {
-                throw new InvalidOperationParametersException("Количество купюр не может быть отрицательным");
+                throw new InvalidOperationParametersException("Количество не может быть отрицательным");
             }
             if (cnt > 0) 
             {
                 try 
                 {
-                    // 
                     cashHolders[i].addCash(cnt);
                 } catch (InvalidDenominationException e)
                 {
@@ -282,37 +250,41 @@ public class Atm
             }
         }
         userBalance += total;
+        
+        // --- ДОБАВЛЕНО: обновление баланса в БД ---
+        db.updateBalance(currentUserName, userBalance);
+        
         System.out.println("Внесено всего: " + total + " руб.");
         Operation op = new Operation("Внесение", "total=" + total, currentUserName, opJournal);
         op.execute("OK");
     }
 
-    // 
     static void payService() throws AtmException
     {
         System.out.println("\nОплата услуг");
-        String service = readLine("Введите название услуги (например, Интернет): ");
+        String service = readLine("Введите название услуги: ");
         int amount = readInt("Введите сумму оплаты: ");
         
-        // 
         if (amount <= 0) {
-            throw new InvalidOperationParametersException("Сумма оплаты должна быть больше нуля");
+            throw new InvalidOperationParametersException("Сумма должна быть больше нуля");
         }
         
-        // 
         if (amount > userBalance) 
         {
-            Operation op = new Operation("Оплата услуг", "service=" + service + ";amount=" + amount, currentUserName, opJournal);
+            Operation op = new Operation("Оплата услуг", "service=" + service, currentUserName, opJournal);
             op.execute("FAIL (balance)");
-            throw new InsufficientCashException("Недостаточно средств на счете для оплаты услуги. Требуется: " + amount + ", доступно: " + userBalance);
+            throw new InsufficientCashException("Недостаточно средств");
         }
         userBalance -= amount;
+        
+        // --- ДОБАВЛЕНО: обновление баланса в БД ---
+        db.updateBalance(currentUserName, userBalance);
+        
         System.out.println("Услуга \"" + service + "\" оплачена на " + amount + " руб.");
-        Operation op = new Operation("Оплата услуг", "service=" + service + ";amount=" + amount, currentUserName, opJournal);
+        Operation op = new Operation("Оплата услуг", "service=" + service, currentUserName, opJournal);
         op.execute("OK");
     }
 
-    // 
     static void refillAtm() throws AtmException
     {
         System.out.println("\n--- Пополнение банкомата (сервис) ---");
@@ -320,18 +292,17 @@ public class Atm
         {
             int cnt = readInt("Сколько купюр номиналом " + cashHolders[i].getDenomination() + " добавить? ");
             
-            // 
             if (cnt < 0) {
-                throw new InvalidOperationParametersException("Количество купюр не может быть отрицательным");
+                throw new InvalidOperationParametersException("Количество не может быть отрицательным");
             }
             
             if (cnt > 0) {
                 try {
-                    // 
                     cashHolders[i].addCash(cnt);
                 } catch (InvalidDenominationException e) {
                     throw new InvalidOperationParametersException(e.getMessage());
                 }
+                // заменено: getDеноминация() -> getDenomination()
                 cashJournal.log("Пополнение(сервис)", String.valueOf(cashHolders[i].getDenomination()), String.valueOf(cnt));
             }
         }
@@ -339,7 +310,6 @@ public class Atm
         op.execute("OK");
     }
 
-    // 
     static void printCashReport() throws AtmException
     {
         System.out.println("\n--- Отчет по операциям с купюрами (сеанс) ---");
@@ -374,7 +344,7 @@ public class Atm
         }
 
         System.out.println(line);
-        Operation op = new Operation("Отчет по купюрам", "file=" + cashSessionFile, currentUserName, opJournal);
+        Operation op = new Operation("Отчет по купюрам", "-", currentUserName, opJournal);
         op.execute("OK");
     }
 
