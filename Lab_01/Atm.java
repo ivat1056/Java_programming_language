@@ -5,7 +5,7 @@ import java.util.Scanner;
 
 public class Atm 
 {
-    // --- ДОБАВЛЕНО: объект для работы с БД ---
+    //
     static DatabaseManager db = new DatabaseManager();
     
     static CashHolder[] cashHolders = 
@@ -30,10 +30,9 @@ public class Atm
     static String opsAllFile = "ops_all.txt";
     static String cashAllFile = "cash_all.txt";
 
-    // --- ИЗМЕНЕНО: передача db в Journal ---
+    // 
     static Journal opJournal = new Journal(opsAllFile, opsSessionFile, db);
     static Journal cashJournal = new Journal(cashAllFile, cashSessionFile, db);
-
     static Scanner scanner = new Scanner(System.in);
 
     public static void main(String[] args) 
@@ -43,6 +42,7 @@ public class Atm
         try 
         {
             loadUsersAndAuthorize();
+            initCashHoldersFromDb();
         } catch (InvalidCredentialsException e) 
         {
             System.out.println("Ошибка авторизации: " + e.getMessage());
@@ -80,7 +80,7 @@ public class Atm
                         else System.out.println("Нет прав доступа.");
                         break;
                     case 6:
-                        // --- ДОБАВЛЕНО: показать историю из БД ---
+                        // 
                         db.printOperations();
                         break;
                     case 0:
@@ -98,18 +98,18 @@ public class Atm
         } while (choice != 0);
 
         System.out.println("Сеанс завершён.");
-        // --- ДОБАВЛЕНО: закрытие БД при выходе ---
+        // 
         db.close();
     }
 
-    // --- ИЗМЕНЕНО: авторизация теперь из БД ---
+    // 
     static void loadUsersAndAuthorize() throws InvalidCredentialsException
     {
         System.out.println("Авторизация по карте");
         String cardInput = readLine("Введите номер карты: ");
         String pinInput = readLine("Введите PIN: ");
         
-        // --- ДОБАВЛЕНО: проверка в БД вместо файла ---
+        // 
         User user = db.authenticate(cardInput, pinInput);
         
         currentUserName = user.getName();
@@ -124,9 +124,9 @@ public class Atm
     static void printMenu() 
     {
         System.out.println("\nМеню");
-        System.out.println("Текущий баланс: " + userBalance + " руб.");
         if (isAdmin()) 
         {
+            System.out.println("Баланс банкомата: " + getAtmBalance() + " руб.");
             System.out.println("4. Пополнение банкомата (сервис)");
             System.out.println("5. Отчет по купюрам (сервис)");
             System.out.println("6. История операций из БД");
@@ -134,6 +134,7 @@ public class Atm
         }
         else
         {
+            System.out.println("Наличность банкомата: " + getAtmBalance() + " руб.");
             System.out.println("1. Снятие наличных");
             System.out.println("2. Внесение наличных");
             System.out.println("3. Оплата услуг");
@@ -184,9 +185,11 @@ public class Atm
             int cnt = take[i];
             if (cnt > 0) 
             {
-                try {
+                try 
+                {
                     cashHolders[i].removeCash(cnt);
-                } catch (InsufficientDenominationException e) 
+                } 
+                catch (InsufficientDenominationException e) 
                 {
                     throw new InsufficientDenominationException(e.getMessage());
                 }
@@ -195,7 +198,7 @@ public class Atm
         }
         userBalance -= amount;
         
-        // --- ДОБАВЛЕНО: обновление баланса в БД ---
+        // 
         db.updateBalance(currentUserName, userBalance);
 
         System.out.println("Выдано " + amount + " руб. Купюры:");
@@ -251,9 +254,8 @@ public class Atm
         }
         userBalance += total;
         
-        // --- ДОБАВЛЕНО: обновление баланса в БД ---
+        // 
         db.updateBalance(currentUserName, userBalance);
-        
         System.out.println("Внесено всего: " + total + " руб.");
         Operation op = new Operation("Внесение", "total=" + total, currentUserName, opJournal);
         op.execute("OK");
@@ -277,7 +279,7 @@ public class Atm
         }
         userBalance -= amount;
         
-        // --- ДОБАВЛЕНО: обновление баланса в БД ---
+        // 
         db.updateBalance(currentUserName, userBalance);
         
         System.out.println("Услуга \"" + service + "\" оплачена на " + amount + " руб.");
@@ -299,10 +301,22 @@ public class Atm
             if (cnt > 0) {
                 try {
                     cashHolders[i].addCash(cnt);
-                } catch (InvalidDenominationException e) {
+                    // 
+                    try {
+                        db.updateCashHolder(cashHolders[i].getDenomination(), cashHolders[i].getCount());
+                        db.logCashChange("Пополнение(сервис)", cashHolders[i].getDenomination(), cnt);
+                        System.out.println("[DEBUG] denom=" + cashHolders[i].getDenomination() + " -> " + cashHolders[i].getCount());
+                    } 
+                    catch (Exception e) 
+                    {                    
+                    //
+                        System.out.println("Ошибка обновления cash_holders в БД: " + e.getMessage());
+                    }
+                } 
+                catch (InvalidDenominationException e) 
+                {
                     throw new InvalidOperationParametersException(e.getMessage());
                 }
-                // заменено: getDеноминация() -> getDenomination()
                 cashJournal.log("Пополнение(сервис)", String.valueOf(cashHolders[i].getDenomination()), String.valueOf(cnt));
             }
         }
@@ -389,5 +403,33 @@ public class Atm
     static String padLeft(int value, int n) 
     {
         return padLeft(String.valueOf(value), n);
+    }
+
+    // 
+    static void initCashHoldersFromDb()
+    {
+        CashHolder[] dbHolders = db.getAllCashHolders();
+        if (dbHolders != null && dbHolders.length > 0) 
+        {
+            cashHolders = dbHolders;
+        }
+        else 
+        {
+            for (CashHolder holder : cashHolders) 
+            {
+                db.updateCashHolder(holder.getDenomination(), holder.getCount());
+            }
+        }
+    }
+
+    // 
+    static int getAtmBalance()
+    {
+        int total = 0;
+        for (CashHolder holder : cashHolders) 
+        {
+            total += holder.getCount() * holder.getDenomination();
+        }
+        return total;
     }
 }

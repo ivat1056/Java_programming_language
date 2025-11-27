@@ -1,10 +1,12 @@
-// --- ДОБАВЛЕНО: Класс пользователя ---
-public class User {
+// 
+public class User 
+{
     private String name;
     private String role;
     private int balance;
 
-    public User(String name, String role, int balance) {
+    public User(String name, String role, int balance) 
+    {
         this.name = name;
         this.role = role;
         this.balance = balance;
